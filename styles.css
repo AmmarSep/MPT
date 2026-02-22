@@ -1,0 +1,96 @@
+:root {
+  --bg: #f4f6f8;
+  --card-bg: #ffffff;
+  --text: #1f2933;
+  --muted: #5f6c7b;
+  --border: #d6dde5;
+  --accent: #1e6f9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.app-header p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.masjid-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.masjid-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.masjid-name-input {
+  width: 100%;
+  margin: 0 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.masjid-name-input:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(30, 111, 159, 0.25);
+  outline-offset: 1px;
+}
+
+.prayer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.prayer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prayer-field label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.prayer-field input[type="time"] {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.prayer-field input[type="time"]:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(30, 111, 159, 0.25);
+  outline-offset: 1px;
+}
