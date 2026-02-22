@@ -46,6 +46,7 @@ const CLOUD = {
 };
 
 const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
+const IS_IOS_DEVICE = detectIosDevice();
 const SHOULD_USE_TEXT_TIME_INPUT = detectShouldUseTextTimeInput();
 
 let state = [];
@@ -57,17 +58,21 @@ let lastRemoteSyncedSnapshot = "";
 let lastPersistedSnapshot = "";
 let upcomingRefreshTimerId = null;
 
-function detectShouldUseTextTimeInput() {
+function detectIosDevice() {
   const userAgent = navigator.userAgent || "";
-  const isIOSDevice =
+  return (
     /iPad|iPhone|iPod/.test(userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function detectShouldUseTextTimeInput() {
   const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
   const isStandalone = standaloneMode || window.navigator.standalone === true;
 
   // Use text fallback only for installed iOS web-app mode.
   // In normal Safari tabs, keep native <input type="time"> picker.
-  return isIOSDevice && isStandalone;
+  return IS_IOS_DEVICE && isStandalone;
 }
 
 function parseTimeValue(value) {
@@ -781,6 +786,7 @@ function installLifecyclePersistence() {
 }
 
 async function initializeApp() {
+  document.documentElement.classList.toggle("ios-device", IS_IOS_DEVICE);
   setupSunriseInput();
   replaceState(loadLocalData());
   await initializeCloudSync();
