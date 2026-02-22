@@ -57,6 +57,7 @@ let pendingSnapshot = null;
 let lastRemoteSyncedSnapshot = "";
 let lastPersistedSnapshot = "";
 let upcomingRefreshTimerId = null;
+let draggedMasjidIndex = null;
 
 function detectIosDevice() {
   const userAgent = navigator.userAgent || "";
@@ -548,6 +549,119 @@ function persistEverywhere(options = {}) {
   refreshUpcomingPrayerHighlights();
 }
 
+function clearMasjidDragState() {
+  const cards = document.querySelectorAll(".masjid-card");
+  cards.forEach((card) => {
+    card.classList.remove("is-dragging", "is-drop-target");
+    card.setAttribute("aria-grabbed", "false");
+  });
+}
+
+function reorderMasjids(fromIndex, toIndex) {
+  if (
+    !Number.isInteger(fromIndex) ||
+    !Number.isInteger(toIndex) ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= state.length ||
+    toIndex >= state.length ||
+    fromIndex === toIndex
+  ) {
+    return false;
+  }
+
+  const [movedMasjid] = state.splice(fromIndex, 1);
+  state.splice(toIndex, 0, movedMasjid);
+  return true;
+}
+
+function setupMasjidDragAndDrop(card, masjidIndex) {
+  card.draggable = true;
+  card.setAttribute("aria-grabbed", "false");
+
+  card.addEventListener("dragstart", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest("input, textarea, select, button")) {
+      event.preventDefault();
+      return;
+    }
+
+    draggedMasjidIndex = masjidIndex;
+    card.classList.add("is-dragging");
+    card.setAttribute("aria-grabbed", "true");
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      try {
+        event.dataTransfer.setData("text/plain", String(masjidIndex));
+      } catch {
+        // Ignore dataTransfer write restrictions.
+      }
+    }
+  });
+
+  card.addEventListener("dragover", (event) => {
+    if (draggedMasjidIndex === null || draggedMasjidIndex === masjidIndex) {
+      return;
+    }
+
+    event.preventDefault();
+    card.classList.add("is-drop-target");
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+  });
+
+  card.addEventListener("dragenter", (event) => {
+    if (draggedMasjidIndex === null || draggedMasjidIndex === masjidIndex) {
+      return;
+    }
+
+    event.preventDefault();
+    card.classList.add("is-drop-target");
+  });
+
+  card.addEventListener("dragleave", (event) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && card.contains(relatedTarget)) {
+      return;
+    }
+
+    card.classList.remove("is-drop-target");
+  });
+
+  card.addEventListener("drop", (event) => {
+    event.preventDefault();
+    card.classList.remove("is-drop-target");
+
+    if (draggedMasjidIndex === null || draggedMasjidIndex === masjidIndex) {
+      draggedMasjidIndex = null;
+      clearMasjidDragState();
+      return;
+    }
+
+    // Capture any in-progress field edits before rebuilding card DOM order.
+    persistAllFieldsFromDOM();
+
+    const didReorder = reorderMasjids(draggedMasjidIndex, masjidIndex);
+    draggedMasjidIndex = null;
+    clearMasjidDragState();
+
+    if (!didReorder) {
+      return;
+    }
+
+    renderMasjids();
+    persistEverywhere({ force: true });
+  });
+
+  card.addEventListener("dragend", () => {
+    draggedMasjidIndex = null;
+    clearMasjidDragState();
+  });
+}
+
 function createPrayerField(masjidIndex, prayer, value) {
   const field = document.createElement("div");
   field.className = "prayer-field";
@@ -685,6 +799,7 @@ function renderMasjids() {
     card.className = "masjid-card";
     card.dataset.masjidIndex = String(index);
     card.style.setProperty("--card-index", String(index));
+    setupMasjidDragAndDrop(card, index);
 
     const cardHead = document.createElement("div");
     cardHead.className = "masjid-card-head";
