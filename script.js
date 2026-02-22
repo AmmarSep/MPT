@@ -1,4 +1,5 @@
 const STORAGE_KEY = "masjid-prayer-times";
+const COOKIE_KEY = "masjid-prayer-times-cookie";
 const PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 
 const defaultData = [
@@ -41,9 +42,42 @@ function cloneDefaultData() {
   }));
 }
 
+function readCookie(name) {
+  const prefix = `${name}=`;
+  const parts = document.cookie.split(";").map((part) => part.trim());
+  const matched = parts.find((part) => part.startsWith(prefix));
+  if (!matched) {
+    return null;
+  }
+
+  return decodeURIComponent(matched.slice(prefix.length));
+}
+
+function writeCookie(name, value, days) {
+  const maxAge = days * 24 * 60 * 60;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+}
+
+function readStoredData() {
+  let localValue = null;
+
+  try {
+    localValue = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    localValue = null;
+  }
+
+  if (typeof localValue === "string" && localValue.length > 0) {
+    return localValue;
+  }
+
+  return readCookie(COOKIE_KEY);
+}
+
 function loadData() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const rawStored = readStoredData();
+    const saved = JSON.parse(rawStored);
     if (!Array.isArray(saved)) {
       return cloneDefaultData();
     }
@@ -67,11 +101,15 @@ function loadData() {
 }
 
 function saveData(data) {
+  const serialized = JSON.stringify(data);
+
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, serialized);
   } catch {
-    // Ignore storage failures (private browsing / restrictive device settings).
+    // Ignore localStorage failures (private browsing / restrictive device settings).
   }
+
+  writeCookie(COOKIE_KEY, serialized, 365);
 }
 
 function createPrayerField(masjidIndex, prayer, value, state) {
