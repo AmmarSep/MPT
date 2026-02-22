@@ -4,6 +4,7 @@ const IDB_DB_NAME = "mpt-storage";
 const IDB_STORE_NAME = "kv";
 const IDB_RECORD_KEY = "masjid-prayer-times";
 const PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 let lastSavedSnapshot = "";
 
 const defaultData = [
@@ -39,6 +40,53 @@ const defaultData = [
   }
 ];
 
+function detectIosStandalone() {
+  const userAgent = navigator.userAgent || "";
+  const isiOSDevice =
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  return isiOSDevice && (standaloneMode || window.navigator.standalone === true);
+}
+
+const IS_IOS_STANDALONE = detectIosStandalone();
+
+function parseTimeValue(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (TIME_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+
+  const digits = trimmed.replace(/\D/g, "").slice(0, 4);
+  let candidate = null;
+
+  if (digits.length === 3) {
+    candidate = `0${digits[0]}:${digits.slice(1)}`;
+  } else if (digits.length === 4) {
+    candidate = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  }
+
+  return candidate && TIME_PATTERN.test(candidate) ? candidate : null;
+}
+
+function formatTimeForTyping(value) {
+  const digits = String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, 4);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length === 3) {
+    return `${digits[0]}:${digits.slice(1)}`;
+  }
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
 function cloneDefaultData() {
   return defaultData.map((masjid) => ({
     name: masjid.name,
@@ -59,7 +107,8 @@ function normalizeData(saved) {
       name: typeof savedMasjid.name === "string" ? savedMasjid.name : masjid.name,
       prayers: PRAYERS.reduce((result, prayer) => {
         const savedTime = savedPrayers[prayer];
-        result[prayer] = typeof savedTime === "string" ? savedTime : masjid.prayers[prayer];
+        const parsed = parseTimeValue(savedTime);
+        result[prayer] = parsed || masjid.prayers[prayer];
         return result;
       }, {})
     };
@@ -201,20 +250,53 @@ function createPrayerField(masjidIndex, prayer, value, state) {
   label.textContent = prayer;
 
   const input = document.createElement("input");
-  input.type = "time";
+  input.className = "prayer-time-input";
   input.value = value;
   input.dataset.masjidIndex = String(masjidIndex);
   input.dataset.prayer = prayer;
   input.setAttribute("aria-label", `${state[masjidIndex].name} ${prayer}`);
 
-  const persistTime = (event) => {
-    state[masjidIndex].prayers[prayer] = event.target.value;
-    saveData(state);
-  };
+  if (IS_IOS_STANDALONE) {
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.placeholder = "HH:MM";
+    input.maxLength = 5;
 
-  input.addEventListener("input", persistTime);
-  input.addEventListener("change", persistTime);
-  input.addEventListener("blur", persistTime);
+    input.addEventListener("input", (event) => {
+      const formatted = formatTimeForTyping(event.target.value);
+      event.target.value = formatted;
+
+      const parsed = parseTimeValue(formatted);
+      if (parsed) {
+        state[masjidIndex].prayers[prayer] = parsed;
+        saveData(state);
+      }
+    });
+
+    input.addEventListener("blur", (event) => {
+      const fallback = state[masjidIndex].prayers[prayer] || defaultData[masjidIndex].prayers[prayer];
+      const parsed = parseTimeValue(event.target.value) || fallback;
+      state[masjidIndex].prayers[prayer] = parsed;
+      event.target.value = parsed;
+      saveData(state);
+    });
+  } else {
+    input.type = "time";
+
+    const persistTime = (event) => {
+      const parsed = parseTimeValue(event.target.value);
+      if (!parsed) {
+        return;
+      }
+
+      state[masjidIndex].prayers[prayer] = parsed;
+      saveData(state);
+    };
+
+    input.addEventListener("input", persistTime);
+    input.addEventListener("change", persistTime);
+    input.addEventListener("blur", persistTime);
+  }
 
   field.append(label, input);
   return field;
@@ -251,13 +333,16 @@ function persistAllFields(state) {
     }
   });
 
-  const timeInputs = document.querySelectorAll("input[type='time'][data-masjid-index][data-prayer]");
+  const timeInputs = document.querySelectorAll(".prayer-time-input[data-masjid-index][data-prayer]");
   timeInputs.forEach((input) => {
     const masjidIndex = Number(input.dataset.masjidIndex);
     const prayer = input.dataset.prayer;
 
     if (Number.isInteger(masjidIndex) && state[masjidIndex] && PRAYERS.includes(prayer)) {
-      state[masjidIndex].prayers[prayer] = input.value;
+      const parsed = parseTimeValue(input.value);
+      if (parsed) {
+        state[masjidIndex].prayers[prayer] = parsed;
+      }
     }
   });
 

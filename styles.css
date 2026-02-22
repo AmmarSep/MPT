@@ -81,7 +81,7 @@ body {
   color: var(--muted);
 }
 
-.prayer-field input[type="time"] {
+.prayer-time-input {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
@@ -89,7 +89,7 @@ body {
   color: var(--text);
 }
 
-.prayer-field input[type="time"]:focus {
+.prayer-time-input:focus {
   border-color: var(--accent);
   outline: 2px solid rgba(30, 111, 159, 0.25);
   outline-offset: 1px;
