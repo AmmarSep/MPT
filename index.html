@@ -15,10 +15,24 @@
   <body>
     <main class="app">
       <header class="app-header">
-        <p class="app-eyebrow">Prayer Timings Dashboard</p>
-        <h1>Masjid Prayer Timings</h1>
-        <p>Edit any prayer time. Changes are saved automatically.</p>
-        <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
+        <div class="app-header-grid">
+          <div class="app-header-main">
+            <p class="app-eyebrow">Prayer Timings Dashboard</p>
+            <h1>Masjid Prayer Timings</h1>
+            <p>Edit any prayer time. Changes are saved automatically.</p>
+            <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
+          </div>
+          <section class="sunrise-panel" aria-label="Sunrise time panel">
+            <p class="sunrise-label">Sunrise</p>
+            <input
+              id="sunrise-time-input"
+              class="sunrise-time-input"
+              type="time"
+              value="06:00"
+              aria-label="Sunrise time"
+            />
+          </section>
+        </div>
       </header>
       <section id="masjid-list" class="masjid-list" aria-live="polite"></section>
     </main>

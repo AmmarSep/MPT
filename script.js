@@ -1,6 +1,7 @@
 const STORAGE_KEY = "masjid-prayer-times";
 const PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const DEFAULT_SUNRISE_TIME = "06:00";
 const UPCOMING_REFRESH_INTERVAL_MS = 30000;
 
 const defaultData = [
@@ -48,6 +49,7 @@ const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
 const IS_IOS_STANDALONE = detectIosStandalone();
 
 let state = [];
+let sunriseTime = DEFAULT_SUNRISE_TIME;
 let syncTimerId = null;
 let syncInFlight = false;
 let pendingSnapshot = null;
@@ -86,6 +88,11 @@ function parseTimeValue(value) {
   return candidate && TIME_PATTERN.test(candidate) ? candidate : null;
 }
 
+function normalizeSunriseValue(value) {
+  const parsed = parseTimeValue(value);
+  return parsed || DEFAULT_SUNRISE_TIME;
+}
+
 function formatTimeForTyping(value) {
   const digits = String(value || "")
     .replace(/\D/g, "")
@@ -109,7 +116,7 @@ function cloneDefaultData() {
   }));
 }
 
-function normalizeData(candidate) {
+function normalizeMasjidData(candidate) {
   if (!Array.isArray(candidate)) {
     return cloneDefaultData();
   }
@@ -129,8 +136,57 @@ function normalizeData(candidate) {
   });
 }
 
+function normalizeStoredPayload(candidate) {
+  if (Array.isArray(candidate)) {
+    return {
+      masjids: normalizeMasjidData(candidate),
+      sunrise: DEFAULT_SUNRISE_TIME
+    };
+  }
+
+  if (candidate && typeof candidate === "object") {
+    const masjidSource = Array.isArray(candidate.masjids)
+      ? candidate.masjids
+      : Array.isArray(candidate.data)
+        ? candidate.data
+        : null;
+
+    const sunriseSource =
+      typeof candidate.sunrise === "string"
+        ? candidate.sunrise
+        : typeof candidate.sunriseTime === "string"
+          ? candidate.sunriseTime
+          : DEFAULT_SUNRISE_TIME;
+
+    return {
+      masjids: normalizeMasjidData(masjidSource),
+      sunrise: normalizeSunriseValue(sunriseSource)
+    };
+  }
+
+  return {
+    masjids: cloneDefaultData(),
+    sunrise: DEFAULT_SUNRISE_TIME
+  };
+}
+
+function buildPersistedPayload() {
+  return {
+    masjids: state,
+    sunrise: sunriseTime
+  };
+}
+
+function getPersistedSnapshot() {
+  return JSON.stringify(buildPersistedPayload());
+}
+
 function getSyncStatusElement() {
   return document.getElementById("sync-status");
+}
+
+function getSunriseInputElement() {
+  return document.getElementById("sunrise-time-input");
 }
 
 function setSyncStatus(text, tone) {
@@ -231,18 +287,82 @@ function refreshUpcomingPrayerHighlights() {
   });
 }
 
+function renderSunriseInputValue() {
+  const input = getSunriseInputElement();
+  if (!input) {
+    return;
+  }
+
+  input.value = sunriseTime;
+}
+
+function setupSunriseInput() {
+  const input = getSunriseInputElement();
+  if (!input || input.dataset.bound === "true") {
+    renderSunriseInputValue();
+    return;
+  }
+
+  input.dataset.bound = "true";
+
+  if (IS_IOS_STANDALONE) {
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.placeholder = "HH:MM";
+    input.maxLength = 5;
+
+    input.addEventListener("input", (event) => {
+      const formatted = formatTimeForTyping(event.target.value);
+      event.target.value = formatted;
+
+      const parsed = parseTimeValue(formatted);
+      if (!parsed) {
+        return;
+      }
+
+      sunriseTime = parsed;
+      persistEverywhere();
+    });
+
+    input.addEventListener("blur", (event) => {
+      const parsed = parseTimeValue(event.target.value) || sunriseTime || DEFAULT_SUNRISE_TIME;
+      sunriseTime = parsed;
+      event.target.value = parsed;
+      persistEverywhere();
+    });
+  } else {
+    input.type = "time";
+
+    const persistSunrise = (event) => {
+      const parsed = parseTimeValue(event.target.value);
+      if (!parsed) {
+        return;
+      }
+
+      sunriseTime = parsed;
+      persistEverywhere();
+    };
+
+    input.addEventListener("input", persistSunrise);
+    input.addEventListener("change", persistSunrise);
+    input.addEventListener("blur", persistSunrise);
+  }
+
+  renderSunriseInputValue();
+}
+
 function loadLocalData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return normalizeData(JSON.parse(raw));
+    return normalizeStoredPayload(JSON.parse(raw));
   } catch {
-    return cloneDefaultData();
+    return normalizeStoredPayload(null);
   }
 }
 
-function saveLocalData(data) {
+function saveLocalData(payload) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // Ignore localStorage failures.
   }
@@ -282,14 +402,14 @@ async function fetchCloudData() {
     return null;
   }
 
-  return normalizeData(rows[0].data);
+  return normalizeStoredPayload(rows[0].data);
 }
 
-async function pushCloudData(data, options = {}) {
+async function pushCloudData(appPayload, options = {}) {
   const payload = [
     {
       id: CLOUD.recordId,
-      data
+      data: appPayload
     }
   ];
 
@@ -310,13 +430,17 @@ async function pushCloudData(data, options = {}) {
   }
 }
 
-function replaceState(nextState) {
-  state = normalizeData(nextState);
+function replaceState(nextPayload) {
+  const normalized = normalizeStoredPayload(nextPayload);
+  state = normalized.masjids;
+  sunriseTime = normalized.sunrise;
+
+  renderSunriseInputValue();
   renderMasjids();
 
-  const snapshot = JSON.stringify(state);
+  const snapshot = getPersistedSnapshot();
   lastPersistedSnapshot = snapshot;
-  saveLocalData(state);
+  saveLocalData(buildPersistedPayload());
 
   refreshUpcomingPrayerHighlights();
 }
@@ -382,7 +506,7 @@ async function flushCloudSync(options = {}) {
 
 function persistEverywhere(options = {}) {
   const force = Boolean(options.force);
-  const snapshot = JSON.stringify(state);
+  const snapshot = getPersistedSnapshot();
 
   if (!force && snapshot === lastPersistedSnapshot) {
     refreshUpcomingPrayerHighlights();
@@ -390,7 +514,7 @@ function persistEverywhere(options = {}) {
   }
 
   lastPersistedSnapshot = snapshot;
-  saveLocalData(state);
+  saveLocalData(buildPersistedPayload());
   scheduleCloudSync(snapshot);
   refreshUpcomingPrayerHighlights();
 }
@@ -491,6 +615,14 @@ function createMasjidNameField(masjidIndex) {
 }
 
 function persistAllFieldsFromDOM() {
+  const sunriseInput = getSunriseInputElement();
+  if (sunriseInput) {
+    const parsedSunrise = parseTimeValue(sunriseInput.value);
+    if (parsedSunrise) {
+      sunriseTime = parsedSunrise;
+    }
+  }
+
   const nameInputs = document.querySelectorAll(".masjid-name-input[data-masjid-index]");
   nameInputs.forEach((input) => {
     const masjidIndex = Number(input.dataset.masjidIndex);
@@ -563,13 +695,13 @@ async function initializeCloudSync() {
 
     if (cloudData) {
       replaceState(cloudData);
-      lastRemoteSyncedSnapshot = JSON.stringify(state);
+      lastRemoteSyncedSnapshot = getPersistedSnapshot();
       setSyncStatus("Synced", "ok");
       return;
     }
 
-    await pushCloudData(state);
-    lastRemoteSyncedSnapshot = JSON.stringify(state);
+    await pushCloudData(buildPersistedPayload());
+    lastRemoteSyncedSnapshot = getPersistedSnapshot();
     setSyncStatus("Synced", "ok");
   } catch (error) {
     console.error(error);
@@ -621,6 +753,7 @@ function installLifecyclePersistence() {
 }
 
 async function initializeApp() {
+  setupSunriseInput();
   replaceState(loadLocalData());
   installLifecyclePersistence();
   await initializeCloudSync();

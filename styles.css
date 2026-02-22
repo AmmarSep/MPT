@@ -72,6 +72,17 @@ body::after {
   backdrop-filter: blur(8px);
 }
 
+.app-header-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.app-header-main {
+  min-width: 0;
+}
+
 .app-eyebrow {
   margin: 0;
   font-size: 0.8rem;
@@ -126,6 +137,47 @@ body::after {
   color: var(--warning);
   border-color: rgba(157, 106, 13, 0.26);
   background: rgba(157, 106, 13, 0.12);
+}
+
+.sunrise-panel {
+  border: 1px solid rgba(15, 123, 104, 0.2);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(233, 251, 245, 0.96), rgba(223, 242, 255, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+}
+
+.sunrise-label {
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--secondary);
+}
+
+.sunrise-time-input {
+  width: 100%;
+  border: 1px solid rgba(15, 123, 104, 0.32);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f4d47;
+  padding: 12px;
+  font-size: clamp(1.45rem, 4vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.sunrise-time-input:focus {
+  border-color: var(--secondary);
+  outline: 2px solid rgba(21, 104, 165, 0.22);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(21, 104, 165, 0.1);
 }
 
 .masjid-list {
@@ -296,6 +348,14 @@ body::after {
 @media (max-width: 980px) {
   .app {
     padding-top: 18px;
+  }
+
+  .app-header-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sunrise-panel {
+    justify-items: stretch;
   }
 
   .masjid-list {
