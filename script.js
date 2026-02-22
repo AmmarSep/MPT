@@ -62,7 +62,12 @@ function detectShouldUseTextTimeInput() {
   const isIOSDevice =
     /iPad|iPhone|iPod/.test(userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return isIOSDevice;
+  const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  const isStandalone = standaloneMode || window.navigator.standalone === true;
+
+  // Use text fallback only for installed iOS web-app mode.
+  // In normal Safari tabs, keep native <input type="time"> picker.
+  return isIOSDevice && isStandalone;
 }
 
 function parseTimeValue(value) {
