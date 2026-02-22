@@ -34,6 +34,23 @@ body {
   color: var(--muted);
 }
 
+.sync-status {
+  min-height: 1.2em;
+  font-size: 0.9rem;
+}
+
+.sync-status.ok {
+  color: #1f7a3f;
+}
+
+.sync-status.syncing {
+  color: var(--accent);
+}
+
+.sync-status.warn {
+  color: #8a5a00;
+}
+
 .masjid-list {
   margin-top: 20px;
   display: grid;

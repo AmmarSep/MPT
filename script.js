@@ -1,11 +1,6 @@
 const STORAGE_KEY = "masjid-prayer-times";
-const COOKIE_KEY = "masjid-prayer-times-cookie";
-const IDB_DB_NAME = "mpt-storage";
-const IDB_STORE_NAME = "kv";
-const IDB_RECORD_KEY = "masjid-prayer-times";
 const PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
-let lastSavedSnapshot = "";
 
 const defaultData = [
   {
@@ -40,6 +35,23 @@ const defaultData = [
   }
 ];
 
+const APP_CONFIG = window.MPT_CONFIG || {};
+const CLOUD = {
+  url: String(APP_CONFIG.supabaseUrl || "").replace(/\/+$/, ""),
+  anonKey: String(APP_CONFIG.supabaseAnonKey || ""),
+  table: String(APP_CONFIG.supabaseTable || "prayer_timings"),
+  recordId: String(APP_CONFIG.supabaseRecordId || "global")
+};
+
+const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
+const IS_IOS_STANDALONE = detectIosStandalone();
+
+let state = [];
+let syncTimerId = null;
+let syncInFlight = false;
+let pendingSnapshot = null;
+let lastRemoteSyncedSnapshot = "";
+
 function detectIosStandalone() {
   const userAgent = navigator.userAgent || "";
   const isiOSDevice =
@@ -48,8 +60,6 @@ function detectIosStandalone() {
   const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
   return isiOSDevice && (standaloneMode || window.navigator.standalone === true);
 }
-
-const IS_IOS_STANDALONE = detectIosStandalone();
 
 function parseTimeValue(value) {
   if (typeof value !== "string") {
@@ -81,9 +91,11 @@ function formatTimeForTyping(value) {
   if (digits.length <= 2) {
     return digits;
   }
+
   if (digits.length === 3) {
     return `${digits[0]}:${digits.slice(1)}`;
   }
+
   return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 }
 
@@ -94,20 +106,19 @@ function cloneDefaultData() {
   }));
 }
 
-function normalizeData(saved) {
-  if (!Array.isArray(saved)) {
+function normalizeData(candidate) {
+  if (!Array.isArray(candidate)) {
     return cloneDefaultData();
   }
 
   return defaultData.map((masjid, index) => {
-    const savedMasjid = saved[index] || {};
-    const savedPrayers = savedMasjid.prayers || {};
+    const remoteMasjid = candidate[index] || {};
+    const remotePrayers = remoteMasjid.prayers || {};
 
     return {
-      name: typeof savedMasjid.name === "string" ? savedMasjid.name : masjid.name,
+      name: typeof remoteMasjid.name === "string" && remoteMasjid.name.trim() ? remoteMasjid.name : masjid.name,
       prayers: PRAYERS.reduce((result, prayer) => {
-        const savedTime = savedPrayers[prayer];
-        const parsed = parseTimeValue(savedTime);
+        const parsed = parseTimeValue(remotePrayers[prayer]);
         result[prayer] = parsed || masjid.prayers[prayer];
         return result;
       }, {})
@@ -115,134 +126,163 @@ function normalizeData(saved) {
   });
 }
 
-function readCookie(name) {
-  const prefix = `${name}=`;
-  const parts = document.cookie.split(";").map((part) => part.trim());
-  const matched = parts.find((part) => part.startsWith(prefix));
-  if (!matched) {
-    return null;
-  }
-
-  return decodeURIComponent(matched.slice(prefix.length));
+function getSyncStatusElement() {
+  return document.getElementById("sync-status");
 }
 
-function writeCookie(name, value, days) {
-  const maxAge = days * 24 * 60 * 60;
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
-}
-
-function openIndexedDb() {
-  return new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) {
-      reject(new Error("IndexedDB not supported"));
-      return;
-    }
-
-    const request = indexedDB.open(IDB_DB_NAME, 1);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
-        db.createObjectStore(IDB_STORE_NAME);
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
-  });
-}
-
-async function readIndexedDbData() {
-  try {
-    const db = await openIndexedDb();
-
-    return await new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE_NAME, "readonly");
-      const request = tx.objectStore(IDB_STORE_NAME).get(IDB_RECORD_KEY);
-
-      request.onsuccess = () => {
-        resolve(typeof request.result === "string" ? request.result : null);
-      };
-
-      request.onerror = () => {
-        resolve(null);
-      };
-
-      tx.oncomplete = () => db.close();
-      tx.onabort = () => db.close();
-      tx.onerror = () => db.close();
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function writeIndexedDbData(serialized) {
-  try {
-    const db = await openIndexedDb();
-
-    await new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE_NAME, "readwrite");
-      tx.objectStore(IDB_STORE_NAME).put(serialized, IDB_RECORD_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => resolve();
-      tx.onerror = () => resolve();
-    });
-
-    db.close();
-  } catch {
-    // Ignore IndexedDB failures.
-  }
-}
-
-function readStoredData() {
-  let localValue = null;
-
-  try {
-    localValue = localStorage.getItem(STORAGE_KEY);
-  } catch {
-    localValue = null;
-  }
-
-  if (typeof localValue === "string" && localValue.length > 0) {
-    return localValue;
-  }
-
-  return readCookie(COOKIE_KEY);
-}
-
-function loadData() {
-  try {
-    const rawStored = readStoredData();
-    const normalized = normalizeData(JSON.parse(rawStored));
-    lastSavedSnapshot = JSON.stringify(normalized);
-    return normalized;
-  } catch {
-    const fallback = cloneDefaultData();
-    lastSavedSnapshot = JSON.stringify(fallback);
-    return fallback;
-  }
-}
-
-function saveData(data) {
-  const serialized = JSON.stringify(data);
-  if (serialized === lastSavedSnapshot) {
+function setSyncStatus(text, tone) {
+  const element = getSyncStatusElement();
+  if (!element) {
     return;
   }
 
-  lastSavedSnapshot = serialized;
-
-  try {
-    localStorage.setItem(STORAGE_KEY, serialized);
-  } catch {
-    // Ignore localStorage failures (private browsing / restrictive device settings).
-  }
-
-  writeCookie(COOKIE_KEY, serialized, 365);
-  writeIndexedDbData(serialized);
+  element.textContent = text;
+  element.className = `sync-status ${tone || ""}`.trim();
 }
 
-function createPrayerField(masjidIndex, prayer, value, state) {
+function loadLocalData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return normalizeData(JSON.parse(raw));
+  } catch {
+    return cloneDefaultData();
+  }
+}
+
+function saveLocalData(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore localStorage failures.
+  }
+}
+
+function cloudHeaders(includeContentType) {
+  const headers = {
+    apikey: CLOUD.anonKey,
+    Authorization: `Bearer ${CLOUD.anonKey}`
+  };
+
+  if (includeContentType) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  return headers;
+}
+
+async function fetchCloudData() {
+  const params = new URLSearchParams({
+    id: `eq.${CLOUD.recordId}`,
+    select: "data"
+  });
+
+  const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?${params.toString()}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: cloudHeaders(false)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Cloud load failed (${response.status})`);
+  }
+
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  return normalizeData(rows[0].data);
+}
+
+async function pushCloudData(data) {
+  const payload = [
+    {
+      id: CLOUD.recordId,
+      data
+    }
+  ];
+
+  const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?on_conflict=id`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...cloudHeaders(true),
+      Prefer: "resolution=merge-duplicates,return=minimal"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Cloud save failed (${response.status}): ${errorText}`);
+  }
+}
+
+function replaceState(nextState) {
+  state = normalizeData(nextState);
+  renderMasjids();
+  saveLocalData(state);
+}
+
+function scheduleCloudSync() {
+  if (!CLOUD_SYNC_ENABLED) {
+    return;
+  }
+
+  pendingSnapshot = JSON.stringify(state);
+  setSyncStatus("Syncing...", "syncing");
+
+  if (syncTimerId) {
+    clearTimeout(syncTimerId);
+  }
+
+  syncTimerId = window.setTimeout(() => {
+    void flushCloudSync();
+  }, 400);
+}
+
+async function flushCloudSync() {
+  if (!CLOUD_SYNC_ENABLED || !pendingSnapshot) {
+    return;
+  }
+
+  if (syncInFlight) {
+    return;
+  }
+
+  const snapshot = pendingSnapshot;
+  pendingSnapshot = null;
+
+  if (snapshot === lastRemoteSyncedSnapshot) {
+    setSyncStatus("Synced", "ok");
+    return;
+  }
+
+  syncInFlight = true;
+
+  try {
+    await pushCloudData(JSON.parse(snapshot));
+    lastRemoteSyncedSnapshot = snapshot;
+    setSyncStatus("Synced", "ok");
+  } catch (error) {
+    console.error(error);
+    pendingSnapshot = snapshot;
+    setSyncStatus("Cloud unavailable (local cache active)", "warn");
+  } finally {
+    syncInFlight = false;
+
+    if (pendingSnapshot && pendingSnapshot !== snapshot) {
+      void flushCloudSync();
+    }
+  }
+}
+
+function persistEverywhere() {
+  saveLocalData(state);
+  scheduleCloudSync();
+}
+
+function createPrayerField(masjidIndex, prayer, value) {
   const field = document.createElement("div");
   field.className = "prayer-field";
 
@@ -267,10 +307,12 @@ function createPrayerField(masjidIndex, prayer, value, state) {
       event.target.value = formatted;
 
       const parsed = parseTimeValue(formatted);
-      if (parsed) {
-        state[masjidIndex].prayers[prayer] = parsed;
-        saveData(state);
+      if (!parsed) {
+        return;
       }
+
+      state[masjidIndex].prayers[prayer] = parsed;
+      persistEverywhere();
     });
 
     input.addEventListener("blur", (event) => {
@@ -278,7 +320,7 @@ function createPrayerField(masjidIndex, prayer, value, state) {
       const parsed = parseTimeValue(event.target.value) || fallback;
       state[masjidIndex].prayers[prayer] = parsed;
       event.target.value = parsed;
-      saveData(state);
+      persistEverywhere();
     });
   } else {
     input.type = "time";
@@ -290,7 +332,7 @@ function createPrayerField(masjidIndex, prayer, value, state) {
       }
 
       state[masjidIndex].prayers[prayer] = parsed;
-      saveData(state);
+      persistEverywhere();
     };
 
     input.addEventListener("input", persistTime);
@@ -302,7 +344,7 @@ function createPrayerField(masjidIndex, prayer, value, state) {
   return field;
 }
 
-function createMasjidNameField(masjidIndex, state) {
+function createMasjidNameField(masjidIndex) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "masjid-name-input";
@@ -312,19 +354,19 @@ function createMasjidNameField(masjidIndex, state) {
 
   input.addEventListener("input", (event) => {
     state[masjidIndex].name = event.target.value;
-    saveData(state);
+    persistEverywhere();
   });
 
   input.addEventListener("blur", () => {
     state[masjidIndex].name = input.value.trim() || defaultData[masjidIndex].name;
     input.value = state[masjidIndex].name;
-    saveData(state);
+    persistEverywhere();
   });
 
   return input;
 }
 
-function persistAllFields(state) {
+function persistAllFieldsFromDOM() {
   const nameInputs = document.querySelectorAll(".masjid-name-input[data-masjid-index]");
   nameInputs.forEach((input) => {
     const masjidIndex = Number(input.dataset.masjidIndex);
@@ -346,38 +388,10 @@ function persistAllFields(state) {
     }
   });
 
-  saveData(state);
+  persistEverywhere();
 }
 
-async function hydrateFromIndexedDb(state) {
-  const rawIndexedData = await readIndexedDbData();
-  if (typeof rawIndexedData !== "string" || rawIndexedData.length === 0) {
-    return;
-  }
-
-  let indexedState = null;
-  try {
-    indexedState = normalizeData(JSON.parse(rawIndexedData));
-  } catch {
-    indexedState = null;
-  }
-
-  if (!Array.isArray(indexedState)) {
-    return;
-  }
-
-  const existingState = JSON.stringify(state);
-  const incomingState = JSON.stringify(indexedState);
-  if (existingState === incomingState) {
-    return;
-  }
-
-  state.splice(0, state.length, ...indexedState);
-  renderMasjids(state);
-  saveData(state);
-}
-
-function renderMasjids(state) {
+function renderMasjids() {
   const container = document.getElementById("masjid-list");
   container.innerHTML = "";
 
@@ -385,14 +399,13 @@ function renderMasjids(state) {
     const card = document.createElement("article");
     card.className = "masjid-card";
 
-    const title = createMasjidNameField(index, state);
+    const title = createMasjidNameField(index);
 
     const grid = document.createElement("div");
     grid.className = "prayer-grid";
 
     PRAYERS.forEach((prayer) => {
-      const field = createPrayerField(index, prayer, masjid.prayers[prayer], state);
-      grid.append(field);
+      grid.append(createPrayerField(index, prayer, masjid.prayers[prayer]));
     });
 
     card.append(title, grid);
@@ -400,19 +413,60 @@ function renderMasjids(state) {
   });
 }
 
-const state = loadData();
-renderMasjids(state);
-hydrateFromIndexedDb(state);
-
-window.setInterval(() => {
-  persistAllFields(state);
-}, 1000);
-
-// iOS standalone/webview can skip late change events when app closes.
-window.addEventListener("beforeunload", () => persistAllFields(state));
-window.addEventListener("pagehide", () => persistAllFields(state));
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
-    persistAllFields(state);
+async function initializeCloudSync() {
+  if (!CLOUD_SYNC_ENABLED) {
+    setSyncStatus("Cloud sync disabled (configure config.js)", "warn");
+    return;
   }
-});
+
+  setSyncStatus("Connecting to cloud...", "syncing");
+
+  try {
+    const cloudData = await fetchCloudData();
+
+    if (cloudData) {
+      replaceState(cloudData);
+      lastRemoteSyncedSnapshot = JSON.stringify(state);
+      setSyncStatus("Synced", "ok");
+      return;
+    }
+
+    await pushCloudData(state);
+    lastRemoteSyncedSnapshot = JSON.stringify(state);
+    setSyncStatus("Synced", "ok");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Cloud unavailable (local cache active)", "warn");
+  }
+}
+
+function installLifecyclePersistence() {
+  window.setInterval(() => {
+    persistAllFieldsFromDOM();
+
+    if (pendingSnapshot && !syncInFlight) {
+      void flushCloudSync();
+    }
+  }, 5000);
+
+  window.addEventListener("beforeunload", persistAllFieldsFromDOM);
+  window.addEventListener("pagehide", persistAllFieldsFromDOM);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      persistAllFieldsFromDOM();
+    }
+
+    if (document.visibilityState === "visible" && pendingSnapshot && !syncInFlight) {
+      void flushCloudSync();
+    }
+  });
+}
+
+async function initializeApp() {
+  replaceState(loadLocalData());
+  installLifecyclePersistence();
+  await initializeCloudSync();
+}
+
+void initializeApp();
