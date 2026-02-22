@@ -194,7 +194,7 @@ async function fetchCloudData() {
   return normalizeData(rows[0].data);
 }
 
-async function pushCloudData(data) {
+async function pushCloudData(data, options = {}) {
   const payload = [
     {
       id: CLOUD.recordId,
@@ -209,6 +209,7 @@ async function pushCloudData(data) {
       ...cloudHeaders(true),
       Prefer: "resolution=merge-duplicates,return=minimal"
     },
+    keepalive: Boolean(options.keepalive),
     body: JSON.stringify(payload)
   });
 
@@ -241,7 +242,7 @@ function scheduleCloudSync() {
   }, 400);
 }
 
-async function flushCloudSync() {
+async function flushCloudSync(options = {}) {
   if (!CLOUD_SYNC_ENABLED || !pendingSnapshot) {
     return;
   }
@@ -261,7 +262,7 @@ async function flushCloudSync() {
   syncInFlight = true;
 
   try {
-    await pushCloudData(JSON.parse(snapshot));
+    await pushCloudData(JSON.parse(snapshot), options);
     lastRemoteSyncedSnapshot = snapshot;
     setSyncStatus("Synced", "ok");
   } catch (error) {
@@ -449,12 +450,20 @@ function installLifecyclePersistence() {
     }
   }, 5000);
 
-  window.addEventListener("beforeunload", persistAllFieldsFromDOM);
-  window.addEventListener("pagehide", persistAllFieldsFromDOM);
+  function persistAndFlushNow() {
+    persistAllFieldsFromDOM();
+
+    if (pendingSnapshot && !syncInFlight) {
+      void flushCloudSync({ keepalive: true });
+    }
+  }
+
+  window.addEventListener("beforeunload", persistAndFlushNow);
+  window.addEventListener("pagehide", persistAndFlushNow);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
-      persistAllFieldsFromDOM();
+      persistAndFlushNow();
     }
 
     if (document.visibilityState === "visible" && pendingSnapshot && !syncInFlight) {
