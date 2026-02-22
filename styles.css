@@ -416,7 +416,7 @@ body::after {
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 860px) {
   .app {
     padding-top: 18px;
   }
