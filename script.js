@@ -75,10 +75,13 @@ function createPrayerField(masjidIndex, prayer, value, state) {
   input.value = value;
   input.setAttribute("aria-label", `${state[masjidIndex].name} ${prayer}`);
 
-  input.addEventListener("change", (event) => {
+  const persistTime = (event) => {
     state[masjidIndex].prayers[prayer] = event.target.value;
     saveData(state);
-  });
+  };
+
+  input.addEventListener("input", persistTime);
+  input.addEventListener("change", persistTime);
 
   field.append(label, input);
   return field;
@@ -130,4 +133,3 @@ function renderMasjids(state) {
 
 const state = loadData();
 renderMasjids(state);
-saveData(state);
