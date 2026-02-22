@@ -1,6 +1,7 @@
 const STORAGE_KEY = "masjid-prayer-times";
 const PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const UPCOMING_REFRESH_INTERVAL_MS = 30000;
 
 const defaultData = [
   {
@@ -51,6 +52,8 @@ let syncTimerId = null;
 let syncInFlight = false;
 let pendingSnapshot = null;
 let lastRemoteSyncedSnapshot = "";
+let lastPersistedSnapshot = "";
+let upcomingRefreshTimerId = null;
 
 function detectIosStandalone() {
   const userAgent = navigator.userAgent || "";
@@ -140,6 +143,94 @@ function setSyncStatus(text, tone) {
   element.className = `sync-status ${tone || ""}`.trim();
 }
 
+function toMinutes(timeValue) {
+  const parsed = parseTimeValue(timeValue);
+  if (!parsed) {
+    return null;
+  }
+
+  const [hours, minutes] = parsed.split(":").map((chunk) => Number(chunk));
+  return hours * 60 + minutes;
+}
+
+function getNextPrayerInfo(prayers, now = new Date()) {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  let nextPrayer = null;
+
+  PRAYERS.forEach((prayer) => {
+    const prayerTime = prayers[prayer];
+    const prayerMinutes = toMinutes(prayerTime);
+    if (prayerMinutes === null) {
+      return;
+    }
+
+    let deltaMinutes = prayerMinutes - nowMinutes;
+    if (deltaMinutes < 0) {
+      deltaMinutes += 24 * 60;
+    }
+
+    if (!nextPrayer || deltaMinutes < nextPrayer.deltaMinutes) {
+      nextPrayer = {
+        prayer,
+        time: parseTimeValue(prayerTime),
+        deltaMinutes
+      };
+    }
+  });
+
+  return nextPrayer;
+}
+
+function formatCountdown(deltaMinutes) {
+  if (deltaMinutes === 0) {
+    return "now";
+  }
+
+  const hours = Math.floor(deltaMinutes / 60);
+  const minutes = deltaMinutes % 60;
+
+  if (hours === 0) {
+    return `in ${minutes}m`;
+  }
+
+  if (minutes === 0) {
+    return `in ${hours}h`;
+  }
+
+  return `in ${hours}h ${minutes}m`;
+}
+
+function refreshUpcomingPrayerHighlights() {
+  state.forEach((masjid, index) => {
+    const card = document.querySelector(`.masjid-card[data-masjid-index="${index}"]`);
+    if (!card) {
+      return;
+    }
+
+    const nextInfo = getNextPrayerInfo(masjid.prayers);
+    const summary = card.querySelector(".next-prayer-summary");
+
+    const prayerFields = card.querySelectorAll(".prayer-field[data-prayer]");
+    prayerFields.forEach((field) => {
+      const isNext = Boolean(nextInfo && field.dataset.prayer === nextInfo.prayer);
+      field.classList.toggle("is-next-prayer", isNext);
+
+      const badge = field.querySelector(".next-pill");
+      if (badge) {
+        badge.hidden = !isNext;
+      }
+    });
+
+    if (summary) {
+      if (nextInfo) {
+        summary.textContent = `Next: ${nextInfo.prayer} at ${nextInfo.time} (${formatCountdown(nextInfo.deltaMinutes)})`;
+      } else {
+        summary.textContent = "Next prayer unavailable";
+      }
+    }
+  });
+}
+
 function loadLocalData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -222,15 +313,26 @@ async function pushCloudData(data, options = {}) {
 function replaceState(nextState) {
   state = normalizeData(nextState);
   renderMasjids();
+
+  const snapshot = JSON.stringify(state);
+  lastPersistedSnapshot = snapshot;
   saveLocalData(state);
+
+  refreshUpcomingPrayerHighlights();
 }
 
-function scheduleCloudSync() {
+function scheduleCloudSync(snapshot) {
   if (!CLOUD_SYNC_ENABLED) {
     return;
   }
 
-  pendingSnapshot = JSON.stringify(state);
+  if (snapshot === lastRemoteSyncedSnapshot) {
+    pendingSnapshot = null;
+    setSyncStatus("Synced", "ok");
+    return;
+  }
+
+  pendingSnapshot = snapshot;
   setSyncStatus("Syncing...", "syncing");
 
   if (syncTimerId) {
@@ -278,17 +380,38 @@ async function flushCloudSync(options = {}) {
   }
 }
 
-function persistEverywhere() {
+function persistEverywhere(options = {}) {
+  const force = Boolean(options.force);
+  const snapshot = JSON.stringify(state);
+
+  if (!force && snapshot === lastPersistedSnapshot) {
+    refreshUpcomingPrayerHighlights();
+    return;
+  }
+
+  lastPersistedSnapshot = snapshot;
   saveLocalData(state);
-  scheduleCloudSync();
+  scheduleCloudSync(snapshot);
+  refreshUpcomingPrayerHighlights();
 }
 
 function createPrayerField(masjidIndex, prayer, value) {
   const field = document.createElement("div");
   field.className = "prayer-field";
+  field.dataset.prayer = prayer;
+
+  const labelRow = document.createElement("div");
+  labelRow.className = "prayer-label-row";
 
   const label = document.createElement("label");
   label.textContent = prayer;
+
+  const nextPill = document.createElement("span");
+  nextPill.className = "next-pill";
+  nextPill.textContent = "Next";
+  nextPill.hidden = true;
+
+  labelRow.append(label, nextPill);
 
   const input = document.createElement("input");
   input.className = "prayer-time-input";
@@ -341,7 +464,7 @@ function createPrayerField(masjidIndex, prayer, value) {
     input.addEventListener("blur", persistTime);
   }
 
-  field.append(label, input);
+  field.append(labelRow, input);
   return field;
 }
 
@@ -399,8 +522,19 @@ function renderMasjids() {
   state.forEach((masjid, index) => {
     const card = document.createElement("article");
     card.className = "masjid-card";
+    card.dataset.masjidIndex = String(index);
+    card.style.setProperty("--card-index", String(index));
+
+    const cardHead = document.createElement("div");
+    cardHead.className = "masjid-card-head";
 
     const title = createMasjidNameField(index);
+
+    const summary = document.createElement("p");
+    summary.className = "next-prayer-summary";
+    summary.textContent = "Calculating next prayer...";
+
+    cardHead.append(title, summary);
 
     const grid = document.createElement("div");
     grid.className = "prayer-grid";
@@ -409,9 +543,11 @@ function renderMasjids() {
       grid.append(createPrayerField(index, prayer, masjid.prayers[prayer]));
     });
 
-    card.append(title, grid);
+    card.append(cardHead, grid);
     container.append(card);
   });
+
+  refreshUpcomingPrayerHighlights();
 }
 
 async function initializeCloudSync() {
@@ -450,6 +586,14 @@ function installLifecyclePersistence() {
     }
   }, 5000);
 
+  if (upcomingRefreshTimerId) {
+    clearInterval(upcomingRefreshTimerId);
+  }
+
+  upcomingRefreshTimerId = window.setInterval(() => {
+    refreshUpcomingPrayerHighlights();
+  }, UPCOMING_REFRESH_INTERVAL_MS);
+
   function persistAndFlushNow() {
     persistAllFieldsFromDOM();
 
@@ -466,8 +610,12 @@ function installLifecyclePersistence() {
       persistAndFlushNow();
     }
 
-    if (document.visibilityState === "visible" && pendingSnapshot && !syncInFlight) {
-      void flushCloudSync();
+    if (document.visibilityState === "visible") {
+      refreshUpcomingPrayerHighlights();
+
+      if (pendingSnapshot && !syncInFlight) {
+        void flushCloudSync();
+      }
     }
   });
 }

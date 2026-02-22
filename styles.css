@@ -1,10 +1,20 @@
 :root {
-  --bg: #f4f6f8;
-  --card-bg: #ffffff;
-  --text: #1f2933;
-  --muted: #5f6c7b;
-  --border: #d6dde5;
-  --accent: #1e6f9f;
+  --bg-1: #e8f8ef;
+  --bg-2: #e4f2ff;
+  --bg-3: #f5fbff;
+  --text: #143937;
+  --muted: #4d6967;
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --card-border: rgba(15, 123, 104, 0.2);
+  --primary: #0f8f73;
+  --primary-dark: #0a6f59;
+  --secondary: #1568a5;
+  --accent: #2ab7a6;
+  --warning: #9d6a0d;
+  --shadow-soft: 0 10px 28px rgba(16, 69, 95, 0.12);
+  --shadow-strong: 0 20px 46px rgba(16, 69, 95, 0.2);
+  --radius-lg: 24px;
+  --radius-md: 16px;
 }
 
 * {
@@ -13,101 +23,310 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: var(--bg);
+  min-height: 100vh;
+  font-family: "Manrope", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: var(--text);
+  background: linear-gradient(145deg, var(--bg-1), var(--bg-2) 52%, var(--bg-3));
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+body::before {
+  top: -180px;
+  left: -140px;
+  background: radial-gradient(circle, rgba(52, 186, 149, 0.28) 0%, rgba(52, 186, 149, 0) 68%);
+}
+
+body::after {
+  right: -160px;
+  bottom: -220px;
+  background: radial-gradient(circle, rgba(41, 134, 220, 0.25) 0%, rgba(41, 134, 220, 0) 70%);
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 24px 16px 40px;
+  padding: 28px 16px 56px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-header {
+  border: 1px solid rgba(15, 123, 104, 0.2);
+  border-radius: 28px;
+  padding: clamp(20px, 3vw, 34px);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.92), rgba(232, 250, 245, 0.9));
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(8px);
+}
+
+.app-eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--secondary);
 }
 
 .app-header h1 {
-  margin: 0;
-  font-size: 1.75rem;
+  margin: 8px 0 0;
+  font-family: "Aref Ruqaa Ink", Georgia, serif;
+  font-size: clamp(2rem, 3.8vw, 3rem);
+  line-height: 1.1;
+  color: #0e4b47;
 }
 
 .app-header p {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: var(--muted);
+  max-width: 68ch;
 }
 
 .sync-status {
+  display: inline-flex;
+  align-items: center;
   min-height: 1.2em;
-  font-size: 0.9rem;
+  margin-top: 14px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: rgba(20, 57, 55, 0.08);
+  color: #264848;
+  transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
 }
 
 .sync-status.ok {
-  color: #1f7a3f;
+  color: var(--primary-dark);
+  border-color: rgba(15, 143, 115, 0.26);
+  background: rgba(15, 143, 115, 0.12);
 }
 
 .sync-status.syncing {
-  color: var(--accent);
+  color: var(--secondary);
+  border-color: rgba(21, 104, 165, 0.26);
+  background: rgba(21, 104, 165, 0.12);
 }
 
 .sync-status.warn {
-  color: #8a5a00;
+  color: var(--warning);
+  border-color: rgba(157, 106, 13, 0.26);
+  background: rgba(157, 106, 13, 0.12);
 }
 
 .masjid-list {
-  margin-top: 20px;
+  margin-top: 22px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .masjid-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
+  position: relative;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: linear-gradient(160deg, var(--card-bg), rgba(239, 251, 248, 0.9));
+  box-shadow: var(--shadow-soft);
+  transition: transform 260ms ease, box-shadow 260ms ease, border-color 260ms ease;
+  animation: card-in 520ms ease both;
+  animation-delay: calc(var(--card-index, 0) * 70ms);
+}
+
+.masjid-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(90deg, rgba(15, 143, 115, 0.8), rgba(21, 104, 165, 0.76));
+}
+
+.masjid-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-strong);
+  border-color: rgba(15, 143, 115, 0.36);
+}
+
+.masjid-card-head {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .masjid-name-input {
   width: 100%;
-  margin: 0 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  margin: 0;
+  border: 1px solid rgba(15, 123, 104, 0.24);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 12px;
   font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: 800;
   color: var(--text);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
 .masjid-name-input:focus {
-  border-color: var(--accent);
-  outline: 2px solid rgba(30, 111, 159, 0.25);
+  border-color: var(--primary);
+  outline: 2px solid rgba(15, 143, 115, 0.24);
   outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(15, 143, 115, 0.12);
+}
+
+.next-prayer-summary {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.next-prayer-summary::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  box-shadow: 0 0 0 4px rgba(21, 104, 165, 0.14);
 }
 
 .prayer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
 }
 
 .prayer-field {
+  border: 1px solid rgba(15, 123, 104, 0.16);
+  border-radius: 14px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.92), rgba(240, 251, 246, 0.92));
+  transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease, background 220ms ease;
+}
+
+.prayer-field:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 143, 115, 0.33);
+}
+
+.prayer-field.is-next-prayer {
+  border-color: rgba(15, 143, 115, 0.6);
+  box-shadow: 0 12px 24px rgba(15, 143, 115, 0.2);
+  background: linear-gradient(145deg, rgba(220, 251, 238, 0.95), rgba(230, 246, 255, 0.95));
+}
+
+.prayer-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .prayer-field label {
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
+.next-pill {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0d644f;
+  border: 1px solid rgba(13, 100, 79, 0.22);
+  background: rgba(15, 143, 115, 0.14);
+}
+
 .prayer-time-input {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 0.95rem;
-  color: var(--text);
+  width: 100%;
+  border: 1px solid rgba(15, 123, 104, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 9px;
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: #123b39;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .prayer-time-input:focus {
-  border-color: var(--accent);
-  outline: 2px solid rgba(30, 111, 159, 0.25);
+  border-color: var(--secondary);
+  outline: 2px solid rgba(21, 104, 165, 0.2);
   outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(21, 104, 165, 0.1);
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 980px) {
+  .app {
+    padding-top: 18px;
+  }
+
+  .masjid-list {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .masjid-list {
+    grid-template-columns: 1fr;
+  }
+
+  .masjid-card {
+    border-radius: 20px;
+  }
+
+  .prayer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
