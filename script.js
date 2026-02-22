@@ -42,7 +42,7 @@ const CLOUD = {
   url: String(APP_CONFIG.supabaseUrl || "").replace(/\/+$/, ""),
   anonKey: String(APP_CONFIG.supabaseAnonKey || ""),
   table: String(APP_CONFIG.supabaseTable || "prayer_timings"),
-  recordId: String(APP_CONFIG.supabaseRecordId || "global")
+  recordId: String(APP_CONFIG.supabaseRecordId || "main")
 };
 
 const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
