@@ -46,7 +46,7 @@ const CLOUD = {
 };
 
 const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
-const IS_IOS_STANDALONE = detectIosStandalone();
+const SHOULD_USE_TEXT_TIME_INPUT = detectShouldUseTextTimeInput();
 
 let state = [];
 let sunriseTime = DEFAULT_SUNRISE_TIME;
@@ -57,13 +57,12 @@ let lastRemoteSyncedSnapshot = "";
 let lastPersistedSnapshot = "";
 let upcomingRefreshTimerId = null;
 
-function detectIosStandalone() {
+function detectShouldUseTextTimeInput() {
   const userAgent = navigator.userAgent || "";
-  const isiOSDevice =
+  const isIOSDevice =
     /iPad|iPhone|iPod/.test(userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
-  return isiOSDevice && (standaloneMode || window.navigator.standalone === true);
+  return isIOSDevice;
 }
 
 function parseTimeValue(value) {
@@ -329,7 +328,7 @@ function setupSunriseInput() {
 
   input.dataset.bound = "true";
 
-  if (IS_IOS_STANDALONE) {
+  if (SHOULD_USE_TEXT_TIME_INPUT) {
     input.type = "text";
     input.inputMode = "numeric";
     input.placeholder = "HH:MM";
@@ -568,7 +567,7 @@ function createPrayerField(masjidIndex, prayer, value) {
   input.dataset.prayer = prayer;
   input.setAttribute("aria-label", `${state[masjidIndex].name} ${prayer}`);
 
-  if (IS_IOS_STANDALONE) {
+  if (SHOULD_USE_TEXT_TIME_INPUT) {
     input.type = "text";
     input.inputMode = "numeric";
     input.placeholder = "HH:MM";

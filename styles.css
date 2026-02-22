@@ -174,10 +174,13 @@ body::after {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
   color: #0f4d47;
-  padding: 12px;
+  height: 62px;
+  padding: 0 12px;
   font-size: clamp(1.45rem, 4vw, 2.1rem);
   font-weight: 800;
+  line-height: 1;
   letter-spacing: 0.02em;
+  text-align: center;
   transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
 }
 
@@ -192,6 +195,25 @@ body::after {
 .prayer-time-input,
 .sunrise-time-input {
   min-height: 44px;
+}
+
+.prayer-time-input,
+.sunrise-time-input {
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.sunrise-time-input[type="time"]::-webkit-date-and-time-value,
+.prayer-time-input[type="time"]::-webkit-date-and-time-value {
+  min-height: 0;
+  text-align: center;
+}
+
+.sunrise-time-input[type="time"]::-webkit-datetime-edit,
+.prayer-time-input[type="time"]::-webkit-datetime-edit {
+  padding: 0;
 }
 
 .masjid-list {
@@ -333,9 +355,12 @@ body::after {
   border: 1px solid rgba(15, 123, 104, 0.22);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.96);
-  padding: 9px;
+  height: 42px;
+  padding: 0 9px;
   font-size: 0.96rem;
   font-weight: 600;
+  line-height: 1;
+  text-align: center;
   color: #123b39;
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
@@ -452,7 +477,8 @@ body::after {
   .sunrise-time-input {
     font-size: 2.05rem;
     border-radius: 12px;
-    padding: 10px;
+    height: 56px;
+    padding: 0 10px;
   }
 
   .masjid-list {
@@ -500,7 +526,8 @@ body::after {
   .prayer-time-input {
     font-size: 16px;
     border-radius: 10px;
-    padding: 8px;
+    height: 38px;
+    padding: 0 8px;
   }
 }
 
