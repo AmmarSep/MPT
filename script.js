@@ -34,11 +34,18 @@ const defaultData = [
   }
 ];
 
+function cloneDefaultData() {
+  return defaultData.map((masjid) => ({
+    name: masjid.name,
+    prayers: { ...masjid.prayers }
+  }));
+}
+
 function loadData() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!Array.isArray(saved)) {
-      return defaultData;
+      return cloneDefaultData();
     }
 
     return defaultData.map((masjid, index) => {
@@ -55,12 +62,16 @@ function loadData() {
       };
     });
   } catch {
-    return defaultData;
+    return cloneDefaultData();
   }
 }
 
 function saveData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore storage failures (private browsing / restrictive device settings).
+  }
 }
 
 function createPrayerField(masjidIndex, prayer, value, state) {
@@ -73,6 +84,8 @@ function createPrayerField(masjidIndex, prayer, value, state) {
   const input = document.createElement("input");
   input.type = "time";
   input.value = value;
+  input.dataset.masjidIndex = String(masjidIndex);
+  input.dataset.prayer = prayer;
   input.setAttribute("aria-label", `${state[masjidIndex].name} ${prayer}`);
 
   const persistTime = (event) => {
@@ -82,6 +95,7 @@ function createPrayerField(masjidIndex, prayer, value, state) {
 
   input.addEventListener("input", persistTime);
   input.addEventListener("change", persistTime);
+  input.addEventListener("blur", persistTime);
 
   field.append(label, input);
   return field;
@@ -92,6 +106,7 @@ function createMasjidNameField(masjidIndex, state) {
   input.type = "text";
   input.className = "masjid-name-input";
   input.value = state[masjidIndex].name;
+  input.dataset.masjidIndex = String(masjidIndex);
   input.setAttribute("aria-label", `Masjid ${masjidIndex + 1} name`);
 
   input.addEventListener("input", (event) => {
@@ -106,6 +121,28 @@ function createMasjidNameField(masjidIndex, state) {
   });
 
   return input;
+}
+
+function persistAllFields(state) {
+  const nameInputs = document.querySelectorAll(".masjid-name-input[data-masjid-index]");
+  nameInputs.forEach((input) => {
+    const masjidIndex = Number(input.dataset.masjidIndex);
+    if (Number.isInteger(masjidIndex) && state[masjidIndex]) {
+      state[masjidIndex].name = input.value.trim() || defaultData[masjidIndex].name;
+    }
+  });
+
+  const timeInputs = document.querySelectorAll("input[type='time'][data-masjid-index][data-prayer]");
+  timeInputs.forEach((input) => {
+    const masjidIndex = Number(input.dataset.masjidIndex);
+    const prayer = input.dataset.prayer;
+
+    if (Number.isInteger(masjidIndex) && state[masjidIndex] && PRAYERS.includes(prayer)) {
+      state[masjidIndex].prayers[prayer] = input.value;
+    }
+  });
+
+  saveData(state);
 }
 
 function renderMasjids(state) {
@@ -133,3 +170,11 @@ function renderMasjids(state) {
 
 const state = loadData();
 renderMasjids(state);
+
+// iOS standalone/webview can skip late change events when app closes.
+window.addEventListener("pagehide", () => persistAllFields(state));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    persistAllFields(state);
+  }
+});
