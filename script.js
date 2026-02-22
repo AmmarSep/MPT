@@ -67,12 +67,8 @@ function detectIosDevice() {
 }
 
 function detectShouldUseTextTimeInput() {
-  const standaloneMode = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
-  const isStandalone = standaloneMode || window.navigator.standalone === true;
-
-  // Use text fallback only for installed iOS web-app mode.
-  // In normal Safari tabs, keep native <input type="time"> picker.
-  return IS_IOS_DEVICE && isStandalone;
+  // Force native time picker everywhere (including iOS home-screen mode).
+  return false;
 }
 
 function parseTimeValue(value) {
