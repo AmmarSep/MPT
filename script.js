@@ -72,6 +72,30 @@ function parseTimeValue(value) {
   }
 
   const trimmed = value.trim();
+  const normalizedAmPm = trimmed.toUpperCase();
+
+  const amPmMatch = normalizedAmPm.match(/^(\d{1,2}):(\d{2})(?:\s)?(AM|PM)$/);
+  if (amPmMatch) {
+    let hours = Number(amPmMatch[1]);
+    const minutes = Number(amPmMatch[2]);
+    const suffix = amPmMatch[3];
+
+    if (hours >= 1 && hours <= 12 && minutes >= 0 && minutes <= 59) {
+      if (suffix === "AM" && hours === 12) {
+        hours = 0;
+      } else if (suffix === "PM" && hours !== 12) {
+        hours += 12;
+      }
+
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+  }
+
+  const withSecondsMatch = trimmed.match(/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/);
+  if (withSecondsMatch) {
+    return `${withSecondsMatch[1]}:${withSecondsMatch[2]}`;
+  }
+
   if (TIME_PATTERN.test(trimmed)) {
     return trimmed;
   }
@@ -755,8 +779,8 @@ function installLifecyclePersistence() {
 async function initializeApp() {
   setupSunriseInput();
   replaceState(loadLocalData());
-  installLifecyclePersistence();
   await initializeCloudSync();
+  installLifecyclePersistence();
 }
 
 void initializeApp();
