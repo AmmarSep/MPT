@@ -331,11 +331,6 @@ function refreshUpcomingPrayerHighlights() {
     prayerFields.forEach((field) => {
       const isNext = Boolean(nextInfo && field.dataset.prayer === nextInfo.prayer);
       field.classList.toggle("is-next-prayer", isNext);
-
-      const badge = field.querySelector(".next-pill");
-      if (badge) {
-        badge.hidden = !isNext;
-      }
     });
 
     if (summary) {
@@ -703,13 +698,7 @@ function createPrayerField(masjidIndex, prayer, value) {
 
   const label = document.createElement("label");
   label.textContent = prayer;
-
-  const nextPill = document.createElement("span");
-  nextPill.className = "next-pill";
-  nextPill.textContent = "Next";
-  nextPill.hidden = true;
-
-  labelRow.append(label, nextPill);
+  labelRow.append(label);
 
   const input = document.createElement("input");
   input.className = "prayer-time-input";

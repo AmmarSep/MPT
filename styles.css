@@ -374,8 +374,6 @@ body::after {
 .prayer-label-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .prayer-field label {
@@ -384,18 +382,6 @@ body::after {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
-}
-
-.next-pill {
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #0d644f;
-  border: 1px solid rgba(13, 100, 79, 0.22);
-  background: rgba(15, 143, 115, 0.14);
 }
 
 .prayer-time-input {
@@ -565,11 +551,6 @@ body::after {
 
   .prayer-field label {
     font-size: 0.78rem;
-  }
-
-  .next-pill {
-    font-size: 0.64rem;
-    padding: 2px 7px;
   }
 
   .prayer-time-input {
