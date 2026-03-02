@@ -56,6 +56,8 @@ const CLOUD = {
 
 const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
 const IS_IOS_DEVICE = detectIosDevice();
+const IS_STANDALONE_MODE = detectStandaloneMode();
+const IS_IOS_HOMESCREEN = IS_IOS_DEVICE && IS_STANDALONE_MODE;
 const SHOULD_USE_TEXT_TIME_INPUT = detectShouldUseTextTimeInput();
 
 let state = [];
@@ -79,6 +81,15 @@ function detectIosDevice() {
 function detectShouldUseTextTimeInput() {
   // Force native time picker everywhere (including iOS home-screen mode).
   return false;
+}
+
+function detectStandaloneMode() {
+  const mediaMatches =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(display-mode: standalone)").matches;
+
+  const iosStandalone = window.navigator && window.navigator.standalone === true;
+  return Boolean(mediaMatches || iosStandalone);
 }
 
 function parseTimeValue(value) {
@@ -424,6 +435,41 @@ function saveLocalData(payload) {
   }
 }
 
+function isLikelyNetworkError(error) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /failed to fetch|networkerror|load failed|fetch failed/i.test(error.message);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function fetchCloudRequest(url, options) {
+  const maxAttempts = IS_IOS_HOMESCREEN ? 3 : 1;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+
+      if (!isLikelyNetworkError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await wait(250 * attempt);
+    }
+  }
+
+  throw lastError || new Error("Cloud request failed");
+}
+
 function cloudHeaders(includeContentType) {
   const headers = {
     apikey: CLOUD.anonKey,
@@ -444,9 +490,11 @@ async function fetchCloudData() {
   });
 
   const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?${params.toString()}`;
-  const response = await fetch(url, {
+  const response = await fetchCloudRequest(url, {
     method: "GET",
-    headers: cloudHeaders(false)
+    headers: cloudHeaders(false),
+    mode: "cors",
+    cache: "no-store"
   });
 
   if (!response.ok) {
@@ -470,15 +518,23 @@ async function pushCloudData(appPayload, options = {}) {
   ];
 
   const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?on_conflict=id`;
-  const response = await fetch(url, {
+  const requestOptions = {
     method: "POST",
     headers: {
       ...cloudHeaders(true),
       Prefer: "resolution=merge-duplicates,return=minimal"
     },
-    keepalive: Boolean(options.keepalive),
+    mode: "cors",
+    cache: "no-store",
     body: JSON.stringify(payload)
-  });
+  };
+
+  // iOS Home Screen mode has known instability with keepalive + cross-origin fetch.
+  if (options.keepalive && !IS_IOS_HOMESCREEN) {
+    requestOptions.keepalive = true;
+  }
+
+  const response = await fetchCloudRequest(url, requestOptions);
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
@@ -894,6 +950,10 @@ function installLifecyclePersistence() {
     persistAllFieldsFromDOM();
 
     if (pendingSnapshot && !syncInFlight) {
+      if (IS_IOS_HOMESCREEN) {
+        return;
+      }
+
       void flushCloudSync({ keepalive: true });
     }
   }
