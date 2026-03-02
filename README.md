@@ -45,7 +45,7 @@ with check (true);
 ```
 
 3. Open `config.js` and set:
-- `supabaseUrl` from `Project Settings > API > Project URL`.
+- `supabaseUrl` from `Project Settings > API > Project URL` (or use `https://<project-ref>.supabase.co/rest/v1`).
 - `supabaseAnonKey` from `Project Settings > API > anon public key`.
 - Optional: `supabaseTable` and `supabaseRecordId`.
 4. Commit and push `config.js`, then wait for GitHub Pages deploy.

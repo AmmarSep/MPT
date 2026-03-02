@@ -37,12 +37,21 @@ const defaultData = [
   }
 ];
 
+function cleanConfigValue(value) {
+  return String(value || "").trim();
+}
+
+function normalizeCloudUrl(value) {
+  const trimmed = cleanConfigValue(value).replace(/\/+$/, "");
+  return trimmed.replace(/\/rest\/v1$/i, "");
+}
+
 const APP_CONFIG = window.MPT_CONFIG || {};
 const CLOUD = {
-  url: String(APP_CONFIG.supabaseUrl || "").replace(/\/+$/, ""),
-  anonKey: String(APP_CONFIG.supabaseAnonKey || ""),
-  table: String(APP_CONFIG.supabaseTable || "prayer_timings"),
-  recordId: String(APP_CONFIG.supabaseRecordId || "main")
+  url: normalizeCloudUrl(APP_CONFIG.supabaseUrl),
+  anonKey: cleanConfigValue(APP_CONFIG.supabaseAnonKey),
+  table: cleanConfigValue(APP_CONFIG.supabaseTable) || "prayer_timings",
+  recordId: cleanConfigValue(APP_CONFIG.supabaseRecordId) || "main"
 };
 
 const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
@@ -227,6 +236,28 @@ function setSyncStatus(text, tone) {
 
   element.textContent = text;
   element.className = `sync-status ${tone || ""}`.trim();
+}
+
+function getCloudUnavailableStatus(error) {
+  const fallbackStatus = "Cloud unavailable (local cache active)";
+  if (!(error instanceof Error)) {
+    return fallbackStatus;
+  }
+
+  const statusMatch = error.message.match(/\((\d{3})\)/);
+  if (statusMatch) {
+    return `Cloud unavailable (${statusMatch[1]}, local cache active)`;
+  }
+
+  if (/failed to fetch|networkerror|load failed|fetch failed/i.test(error.message)) {
+    return "Cloud unavailable (network/CORS, local cache active)";
+  }
+
+  if (/invalid url|failed to construct 'url'/i.test(error.message)) {
+    return "Cloud unavailable (invalid Supabase URL)";
+  }
+
+  return fallbackStatus;
 }
 
 function toMinutes(timeValue) {
@@ -524,7 +555,7 @@ async function flushCloudSync(options = {}) {
   } catch (error) {
     console.error(error);
     pendingSnapshot = snapshot;
-    setSyncStatus("Cloud unavailable (local cache active)", "warn");
+    setSyncStatus(getCloudUnavailableStatus(error), "warn");
   } finally {
     syncInFlight = false;
 
@@ -849,7 +880,7 @@ async function initializeCloudSync() {
     setSyncStatus("Synced", "ok");
   } catch (error) {
     console.error(error);
-    setSyncStatus("Cloud unavailable (local cache active)", "warn");
+    setSyncStatus(getCloudUnavailableStatus(error), "warn");
   }
 }
 
