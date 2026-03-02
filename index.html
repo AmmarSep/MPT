@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa+Ink:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260302b" />
+    <link rel="stylesheet" href="styles.css?v=20260302c" />
   </head>
   <body>
     <main class="app">
@@ -26,7 +26,10 @@
         <div class="app-header-grid">
           <div class="app-header-main">
             <h1>Masjid Prayer Timings</h1>
-            <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
+            <div class="sync-controls">
+              <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
+              <button id="sync-now-button" class="sync-now-button" type="button">Sync Now</button>
+            </div>
           </div>
           <section class="sunrise-panel" aria-label="Sunrise time panel">
             <p class="sunrise-label">Sunrise</p>
@@ -44,6 +47,6 @@
     </main>
 
     <script src="config.js?v=20260222k"></script>
-    <script src="script.js?v=20260302c"></script>
+    <script src="script.js?v=20260302d"></script>
   </body>
 </html>

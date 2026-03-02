@@ -69,6 +69,7 @@ let lastRemoteSyncedSnapshot = "";
 let lastPersistedSnapshot = "";
 let upcomingRefreshTimerId = null;
 let draggedMasjidIndex = null;
+let manualSyncInFlight = false;
 
 function detectIosDevice() {
   const userAgent = navigator.userAgent || "";
@@ -239,6 +240,10 @@ function getSunriseInputElement() {
   return document.getElementById("sunrise-time-input");
 }
 
+function getSyncNowButtonElement() {
+  return document.getElementById("sync-now-button");
+}
+
 function setSyncStatus(text, tone) {
   const element = getSyncStatusElement();
   if (!element) {
@@ -247,6 +252,22 @@ function setSyncStatus(text, tone) {
 
   element.textContent = text;
   element.className = `sync-status ${tone || ""}`.trim();
+}
+
+function setManualSyncButtonState(isSyncing) {
+  const button = getSyncNowButtonElement();
+  if (!button) {
+    return;
+  }
+
+  if (!CLOUD_SYNC_ENABLED) {
+    button.disabled = true;
+    button.textContent = "Sync Disabled";
+    return;
+  }
+
+  button.disabled = Boolean(isSyncing);
+  button.textContent = isSyncing ? "Syncing..." : "Sync Now";
 }
 
 function getCloudUnavailableStatus(error) {
@@ -585,7 +606,7 @@ async function flushCloudSync(options = {}) {
     return;
   }
 
-  if (syncInFlight) {
+  if (syncInFlight || manualSyncInFlight) {
     return;
   }
 
@@ -833,7 +854,7 @@ function createMasjidNameField(masjidIndex) {
   return input;
 }
 
-function persistAllFieldsFromDOM() {
+function captureAllFieldsFromDOM() {
   const sunriseInput = getSunriseInputElement();
   if (sunriseInput) {
     const parsedSunrise = parseTimeValue(sunriseInput.value);
@@ -862,7 +883,10 @@ function persistAllFieldsFromDOM() {
       }
     }
   });
+}
 
+function persistAllFieldsFromDOM() {
+  captureAllFieldsFromDOM();
   persistEverywhere();
 }
 
@@ -929,11 +953,78 @@ async function initializeCloudSync() {
   }
 }
 
+async function runManualSync() {
+  if (!CLOUD_SYNC_ENABLED || manualSyncInFlight) {
+    if (!CLOUD_SYNC_ENABLED) {
+      setSyncStatus("Cloud sync disabled (configure config.js)", "warn");
+      setManualSyncButtonState(false);
+    }
+    return;
+  }
+
+  manualSyncInFlight = true;
+  setManualSyncButtonState(true);
+  setSyncStatus("Manual sync in progress...", "syncing");
+
+  if (syncTimerId) {
+    clearTimeout(syncTimerId);
+    syncTimerId = null;
+  }
+
+  captureAllFieldsFromDOM();
+  const localPayload = buildPersistedPayload();
+  const localSnapshot = JSON.stringify(localPayload);
+  lastPersistedSnapshot = localSnapshot;
+  saveLocalData(localPayload);
+  refreshUpcomingPrayerHighlights();
+
+  try {
+    const cloudData = await fetchCloudData();
+    const hasLocalUnsyncedChanges = localSnapshot !== lastRemoteSyncedSnapshot;
+
+    if (hasLocalUnsyncedChanges || !cloudData) {
+      await pushCloudData(localPayload);
+      lastRemoteSyncedSnapshot = localSnapshot;
+      pendingSnapshot = null;
+      setSyncStatus("Synced", "ok");
+      return;
+    }
+
+    const cloudSnapshot = JSON.stringify(cloudData);
+    if (cloudSnapshot !== localSnapshot) {
+      replaceState(cloudData);
+      lastRemoteSyncedSnapshot = getPersistedSnapshot();
+      pendingSnapshot = null;
+    }
+
+    setSyncStatus("Synced", "ok");
+  } catch (error) {
+    console.error(error);
+    pendingSnapshot = localSnapshot;
+    setSyncStatus(getCloudUnavailableStatus(error), "warn");
+  } finally {
+    manualSyncInFlight = false;
+    setManualSyncButtonState(false);
+  }
+}
+
+function installManualSyncButton() {
+  const button = getSyncNowButtonElement();
+  if (!button) {
+    return;
+  }
+
+  setManualSyncButtonState(false);
+  button.addEventListener("click", () => {
+    void runManualSync();
+  });
+}
+
 function installLifecyclePersistence() {
   window.setInterval(() => {
     persistAllFieldsFromDOM();
 
-    if (pendingSnapshot && !syncInFlight) {
+    if (pendingSnapshot && !syncInFlight && !manualSyncInFlight) {
       void flushCloudSync();
     }
   }, 5000);
@@ -949,7 +1040,7 @@ function installLifecyclePersistence() {
   function persistAndFlushNow() {
     persistAllFieldsFromDOM();
 
-    if (pendingSnapshot && !syncInFlight) {
+    if (pendingSnapshot && !syncInFlight && !manualSyncInFlight) {
       if (IS_IOS_HOMESCREEN) {
         return;
       }
@@ -969,7 +1060,7 @@ function installLifecyclePersistence() {
     if (document.visibilityState === "visible") {
       refreshUpcomingPrayerHighlights();
 
-      if (pendingSnapshot && !syncInFlight) {
+      if (pendingSnapshot && !syncInFlight && !manualSyncInFlight) {
         void flushCloudSync();
       }
     }
@@ -979,6 +1070,7 @@ function installLifecyclePersistence() {
 async function initializeApp() {
   document.documentElement.classList.toggle("ios-device", IS_IOS_DEVICE);
   setupSunriseInput();
+  installManualSyncButton();
   replaceState(loadLocalData());
   await initializeCloudSync();
   installLifecyclePersistence();

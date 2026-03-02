@@ -7,6 +7,7 @@ This project includes a simple static web app for managing prayer timings for mu
 - Shows 3 masjids with prayer times for `Fajr`, `Dhuhr`, `Asr`, `Maghrib`, and `Isha`.
 - Lets you edit masjid names and prayer times directly in the UI.
 - Saves locally and can sync to Supabase for cross-device persistence.
+- Includes a `Sync Now` button for manual cloud sync when auto-sync is delayed.
 
 Open `index.html` in your browser to use the app.
 

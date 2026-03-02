@@ -114,11 +114,19 @@ body::after {
   max-width: 68ch;
 }
 
+.sync-controls {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .sync-status {
   display: inline-flex;
   align-items: center;
   min-height: 1.2em;
-  margin-top: 14px;
+  margin: 0;
   border-radius: 999px;
   padding: 7px 12px;
   font-size: 0.84rem;
@@ -127,6 +135,41 @@ body::after {
   background: rgba(20, 57, 55, 0.08);
   color: #264848;
   transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
+}
+
+.app-header .sync-status {
+  margin: 0;
+}
+
+.sync-now-button {
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 104, 165, 0.28);
+  background: rgba(21, 104, 165, 0.12);
+  color: var(--secondary);
+  padding: 7px 13px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
+}
+
+.sync-now-button:hover {
+  border-color: rgba(21, 104, 165, 0.44);
+  background: rgba(21, 104, 165, 0.18);
+}
+
+.sync-now-button:focus {
+  outline: 2px solid rgba(21, 104, 165, 0.26);
+  outline-offset: 1px;
+}
+
+.sync-now-button:disabled {
+  cursor: not-allowed;
+  color: rgba(20, 57, 55, 0.52);
+  border-color: rgba(20, 57, 55, 0.2);
+  background: rgba(20, 57, 55, 0.1);
 }
 
 .sync-status.ok {
@@ -495,8 +538,18 @@ body::after {
   }
 
   .sync-status {
-    margin-top: 10px;
     padding: 6px 11px;
+  }
+
+  .sync-controls {
+    margin-top: 10px;
+    gap: 8px;
+  }
+
+  .sync-now-button {
+    min-height: 34px;
+    padding: 6px 11px;
+    font-size: 0.76rem;
   }
 
   .sunrise-panel {
