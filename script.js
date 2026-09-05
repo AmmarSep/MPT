@@ -41,23 +41,25 @@ function cleanConfigValue(value) {
   return String(value || "").trim();
 }
 
-function normalizeCloudUrl(value) {
-  const trimmed = cleanConfigValue(value).replace(/\/+$/, "");
-  return trimmed.replace(/\/rest\/v1$/i, "");
-}
-
 const APP_CONFIG = window.MPT_CONFIG || {};
 const CLOUD = {
-  url: normalizeCloudUrl(APP_CONFIG.supabaseUrl),
-  anonKey: cleanConfigValue(APP_CONFIG.supabaseAnonKey),
-  table: cleanConfigValue(APP_CONFIG.supabaseTable) || "prayer_timings",
-  recordId: cleanConfigValue(APP_CONFIG.supabaseRecordId) || "main"
+  firebaseConfig: APP_CONFIG.firebaseConfig || null,
+  collection: cleanConfigValue(APP_CONFIG.firestoreCollection) || "prayerTimings",
+  docId: cleanConfigValue(APP_CONFIG.firestoreDocId) || "main"
 };
 
-const CLOUD_SYNC_ENABLED = Boolean(CLOUD.url && CLOUD.anonKey);
+let firestoreDb = null;
+if (CLOUD.firebaseConfig && CLOUD.firebaseConfig.apiKey && CLOUD.firebaseConfig.projectId) {
+  try {
+    firebase.initializeApp(CLOUD.firebaseConfig);
+    firestoreDb = firebase.firestore();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+const CLOUD_SYNC_ENABLED = Boolean(firestoreDb);
 const IS_IOS_DEVICE = detectIosDevice();
-const IS_STANDALONE_MODE = detectStandaloneMode();
-const IS_IOS_HOMESCREEN = IS_IOS_DEVICE && IS_STANDALONE_MODE;
 const SHOULD_USE_TEXT_TIME_INPUT = detectShouldUseTextTimeInput();
 
 let state = [];
@@ -82,15 +84,6 @@ function detectIosDevice() {
 function detectShouldUseTextTimeInput() {
   // Force native time picker everywhere (including iOS home-screen mode).
   return false;
-}
-
-function detectStandaloneMode() {
-  const mediaMatches =
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(display-mode: standalone)").matches;
-
-  const iosStandalone = window.navigator && window.navigator.standalone === true;
-  return Boolean(mediaMatches || iosStandalone);
 }
 
 function parseTimeValue(value) {
@@ -271,25 +264,21 @@ function setManualSyncButtonState(isSyncing) {
 }
 
 function getCloudUnavailableStatus(error) {
-  const fallbackStatus = "Cloud unavailable (local cache active)";
-  if (!(error instanceof Error)) {
-    return fallbackStatus;
+  const code = error && typeof error.code === "string" ? error.code : "";
+
+  if (code === "permission-denied") {
+    return "Cloud unavailable (permission denied, check Firestore rules)";
   }
 
-  const statusMatch = error.message.match(/\((\d{3})\)/);
-  if (statusMatch) {
-    return `Cloud unavailable (${statusMatch[1]}, local cache active)`;
+  if (code === "unavailable" || code === "deadline-exceeded" || code === "cancelled") {
+    return "Cloud unavailable (network, local cache active)";
   }
 
-  if (/failed to fetch|networkerror|load failed|fetch failed/i.test(error.message)) {
-    return "Cloud unavailable (network/CORS, local cache active)";
+  if (code === "unauthenticated") {
+    return "Cloud unavailable (auth error)";
   }
 
-  if (/invalid url|failed to construct 'url'/i.test(error.message)) {
-    return "Cloud unavailable (invalid Supabase URL)";
-  }
-
-  return fallbackStatus;
+  return "Cloud unavailable (local cache active)";
 }
 
 function toMinutes(timeValue) {
@@ -456,111 +445,21 @@ function saveLocalData(payload) {
   }
 }
 
-function isLikelyNetworkError(error) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return /failed to fetch|networkerror|load failed|fetch failed/i.test(error.message);
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-async function fetchCloudRequest(url, options) {
-  const maxAttempts = IS_IOS_HOMESCREEN ? 3 : 1;
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await fetch(url, options);
-    } catch (error) {
-      lastError = error;
-
-      if (!isLikelyNetworkError(error) || attempt === maxAttempts) {
-        throw error;
-      }
-
-      await wait(250 * attempt);
-    }
-  }
-
-  throw lastError || new Error("Cloud request failed");
-}
-
-function cloudHeaders(includeContentType) {
-  const headers = {
-    apikey: CLOUD.anonKey,
-    Authorization: `Bearer ${CLOUD.anonKey}`
-  };
-
-  if (includeContentType) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  return headers;
+function getMainDocRef() {
+  return firestoreDb.collection(CLOUD.collection).doc(CLOUD.docId);
 }
 
 async function fetchCloudData() {
-  const params = new URLSearchParams({
-    id: `eq.${CLOUD.recordId}`,
-    select: "data"
-  });
-
-  const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?${params.toString()}`;
-  const response = await fetchCloudRequest(url, {
-    method: "GET",
-    headers: cloudHeaders(false),
-    mode: "cors",
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    throw new Error(`Cloud load failed (${response.status})`);
-  }
-
-  const rows = await response.json();
-  if (!Array.isArray(rows) || rows.length === 0) {
+  const snapshot = await getMainDocRef().get({ source: "server" });
+  if (!snapshot.exists) {
     return null;
   }
 
-  return normalizeStoredPayload(rows[0].data);
+  return normalizeStoredPayload(snapshot.data());
 }
 
-async function pushCloudData(appPayload, options = {}) {
-  const payload = [
-    {
-      id: CLOUD.recordId,
-      data: appPayload
-    }
-  ];
-
-  const url = `${CLOUD.url}/rest/v1/${CLOUD.table}?on_conflict=id`;
-  const requestOptions = {
-    method: "POST",
-    headers: {
-      ...cloudHeaders(true),
-      Prefer: "resolution=merge-duplicates,return=minimal"
-    },
-    mode: "cors",
-    cache: "no-store",
-    body: JSON.stringify(payload)
-  };
-
-  // iOS Home Screen mode has known instability with keepalive + cross-origin fetch.
-  if (options.keepalive && !IS_IOS_HOMESCREEN) {
-    requestOptions.keepalive = true;
-  }
-
-  const response = await fetchCloudRequest(url, requestOptions);
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Cloud save failed (${response.status}): ${errorText}`);
-  }
+async function pushCloudData(appPayload) {
+  await getMainDocRef().set(appPayload, { merge: true });
 }
 
 function replaceState(nextPayload) {
@@ -601,7 +500,7 @@ function scheduleCloudSync(snapshot) {
   }, 400);
 }
 
-async function flushCloudSync(options = {}) {
+async function flushCloudSync() {
   if (!CLOUD_SYNC_ENABLED || !pendingSnapshot) {
     return;
   }
@@ -621,7 +520,7 @@ async function flushCloudSync(options = {}) {
   syncInFlight = true;
 
   try {
-    await pushCloudData(JSON.parse(snapshot), options);
+    await pushCloudData(JSON.parse(snapshot));
     lastRemoteSyncedSnapshot = snapshot;
     setSyncStatus("Synced", "ok");
   } catch (error) {
@@ -1041,11 +940,7 @@ function installLifecyclePersistence() {
     persistAllFieldsFromDOM();
 
     if (pendingSnapshot && !syncInFlight && !manualSyncInFlight) {
-      if (IS_IOS_HOMESCREEN) {
-        return;
-      }
-
-      void flushCloudSync({ keepalive: true });
+      void flushCloudSync();
     }
   }
 

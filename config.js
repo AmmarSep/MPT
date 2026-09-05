@@ -1,6 +1,12 @@
 window.MPT_CONFIG = {
-  supabaseUrl: "https://mkbuqfumjunfehpdbdpz.supabase.co",
-  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rYnVxZnVtanVuZmVocGRiZHB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3MzY5MzAsImV4cCI6MjA4NzMxMjkzMH0.i2ToQ0pxW1Pn1zjg_sWk5tc0-SdnHVfyIzjqhkWZ9Po",
-  supabaseTable: "prayer_timings",
-  supabaseRecordId: "main"
+  firebaseConfig: {
+    apiKey: "AIzaSyA4-tjYU5wvBTxlOWzVkl_gi4HoO4vCjyQ",
+    authDomain: "mpt-app-e9a2b.firebaseapp.com",
+    projectId: "mpt-app-e9a2b",
+    storageBucket: "mpt-app-e9a2b.firebasestorage.app",
+    messagingSenderId: "960667552743",
+    appId: "1:960667552743:web:95eaa77aa37a49cb9ecb42"
+  },
+  firestoreCollection: "prayerTimings",
+  firestoreDocId: "main"
 };
