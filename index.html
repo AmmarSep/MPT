@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Masjid Prayer Timings</title>
-    <meta name="theme-color" content="#0f8f73" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#07110f" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-title" content="MPT" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
@@ -18,13 +20,14 @@
       href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa+Ink:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260302c" />
+    <link rel="stylesheet" href="styles.css?v=20260923a" />
   </head>
   <body>
     <main class="app">
       <header class="app-header">
         <div class="app-header-grid">
           <div class="app-header-main">
+            <p class="app-eyebrow"><span lang="ar" dir="rtl">مواقيت الصلاة</span></p>
             <h1>Masjid Prayer Timings</h1>
             <div class="sync-controls">
               <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
@@ -32,7 +35,19 @@
             </div>
           </div>
           <section class="sunrise-panel" aria-label="Sunrise time panel">
-            <p class="sunrise-label">Sunrise</p>
+            <div class="sunrise-head">
+              <svg class="sunrise-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2v4" />
+                <path d="m4.93 7.93 1.41 1.41" />
+                <path d="M2 15h2" />
+                <path d="M20 15h2" />
+                <path d="m19.07 7.93-1.41 1.41" />
+                <path d="M22 19H2" />
+                <path d="M17 15a5 5 0 0 0-10 0" />
+              </svg>
+              <p class="sunrise-label">Sunrise</p>
+              <span class="sunrise-arabic" lang="ar" dir="rtl" aria-hidden="true">الشروق</span>
+            </div>
             <input
               id="sunrise-time-input"
               class="sunrise-time-input"
